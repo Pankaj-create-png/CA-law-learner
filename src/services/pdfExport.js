@@ -1,0 +1,160 @@
+import { jsPDF } from 'jspdf';
+
+/**
+ * Generates a clean client-side Keyword Cram Sheet PDF for a specific chapter or full syllabus.
+ * @param {Object|null} chapter - Chapter object or null for full syllabus
+ * @param {Array} topics - List of topics
+ * @param {Array} flashcards - List of flashcards
+ * @returns {void}
+ */
+export function exportKeywordPdf(chapter = null, topics = [], flashcards = []) {
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4'
+  });
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 15;
+  let y = margin;
+
+  // Primary palette
+  const primaryColor = [15, 23, 42]; // Slate 900
+  const accentColor = [217, 119, 6]; // Amber 600
+  const textColor = [51, 65, 85]; // Slate 700
+
+  // Helper for page break check
+  const checkPageBreak = (needed = 15) => {
+    if (y + needed > pageHeight - margin) {
+      doc.addPage();
+      y = margin;
+      addHeader();
+    }
+  };
+
+  const addHeader = () => {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(148, 163, 184); // Slate 400
+    doc.text("CA LAW LEARN — ICAI EXAMINER KEYWORD CRAM SHEET", margin, y);
+    doc.text("VERIFIED AGAINST ICAI MODULE", pageWidth - margin, y, { align: "right" });
+    y += 4;
+    doc.setLineWidth(0.5);
+    doc.setDrawColor(226, 232, 240);
+    doc.line(margin, y, pageWidth - margin, y);
+    y += 8;
+  };
+
+  // Initial Document Header
+  addHeader();
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(18);
+  doc.setTextColor(...primaryColor);
+  
+  const titleText = chapter 
+    ? `${chapter.unitNumber}: ${chapter.title}` 
+    : "FULL SYLLABUS — MASTER EXAMINER KEYWORD CRAM SHEET";
+  
+  const splitTitle = doc.splitTextToSize(titleText, pageWidth - (margin * 2));
+  doc.text(splitTitle, margin, y);
+  y += (splitTitle.length * 7) + 2;
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.setTextColor(100, 116, 139);
+  doc.text("Essential keywords & section references required to score 60+ marks in subjective papers.", margin, y);
+  y += 10;
+
+  // Filter topics and flashcards
+  const targetTopics = chapter ? topics.filter(t => t.chapterId === chapter.id) : topics;
+
+  targetTopics.forEach((topic, tIdx) => {
+    const topicCards = flashcards.filter(f => f.topicId === topic.id);
+    if (topicCards.length === 0) return;
+
+    checkPageBreak(25);
+
+    // Topic Banner
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(226, 232, 240);
+    doc.roundedRect(margin, y, pageWidth - (margin * 2), 9, 2, 2, 'FD');
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.setTextColor(...accentColor);
+    doc.text(`Topic ${tIdx + 1}: ${topic.title}`, margin + 3, y + 6);
+    y += 13;
+
+    // Flashcards / Keywords in Topic
+    topicCards.forEach((card, cIdx) => {
+      checkPageBreak(20);
+
+      // Section Reference badge
+      if (card.back?.sectionRef) {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(9);
+        doc.setTextColor(...accentColor);
+        doc.text(`• ${card.back.sectionRef}`, margin + 2, y);
+        y += 5;
+      }
+
+      // Front Prompt
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9.5);
+      doc.setTextColor(...primaryColor);
+      const splitFront = doc.splitTextToSize(`Q: ${card.front}`, pageWidth - (margin * 2) - 4);
+      doc.text(splitFront, margin + 2, y);
+      y += (splitFront.length * 4.5) + 2;
+
+      // Definition
+      if (card.back?.definition) {
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8.5);
+        doc.setTextColor(...textColor);
+        const splitDef = doc.splitTextToSize(`Def: ${card.back.definition}`, pageWidth - (margin * 2) - 6);
+        doc.text(splitDef, margin + 4, y);
+        y += (splitDef.length * 4) + 2;
+      }
+
+      // Keywords pill list
+      if (card.back?.keywords && card.back.keywords.length > 0) {
+        checkPageBreak(12);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(8.5);
+        doc.setTextColor(5, 150, 105); // Emerald 600
+        doc.text("Examiner Keywords:", margin + 4, y);
+        y += 4;
+
+        const kwStr = card.back.keywords.map(k => `[ ${k} ]`).join("   ");
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8);
+        doc.setTextColor(30, 41, 59);
+        const splitKw = doc.splitTextToSize(kwStr, pageWidth - (margin * 2) - 8);
+        doc.text(splitKw, margin + 6, y);
+        y += (splitKw.length * 3.8) + 4;
+      }
+
+      y += 2;
+    });
+
+    y += 4;
+  });
+
+  // Footer on each page
+  const pageCount = doc.internal.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(148, 163, 184);
+    doc.text(`Page ${i} of ${pageCount} — Generated by CA Law Learn App`, pageWidth / 2, pageHeight - 8, { align: 'center' });
+  }
+
+  // Download PDF
+  const filename = chapter 
+    ? `CA_Law_${chapter.title.replace(/\s+/g, '_')}_Keywords.pdf` 
+    : `CA_Law_Full_Syllabus_Keywords.pdf`;
+  doc.save(filename);
+}
